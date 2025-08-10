@@ -1,68 +1,105 @@
-// src/lib/store.ts
 import { create } from 'zustand';
-import { produce } from 'immer'; // For safe and easy state updates
+import { produce } from 'immer';
 import { nanoid } from 'nanoid';
-import { subDays } from 'date-fns';
-// Rule for coloring a polygon (e.g., "if temp > 25, color is red")
+import { subDays, addDays } from 'date-fns';
+
+// --- TYPE DEFINITIONS ---
+// (These are the types you already defined, which are perfect)
 export type ColorRule = {
-  id: string; // A unique ID for the rule
-  field: string; // The data field to check (e.g., "temperature_2m")
+  id: string;
+  field: string;
   operator: '>' | '<' | '>=' | '<=' | '==';
   value: number;
-  color: string; // e.g., "#FF0000"
+  color: string;
 };
 
-// Represents a single polygon drawn on the map
 export type Polygon = {
-  id: string; // A unique ID for the polygon
-  name: string; // User-defined name like "My Neighborhood"
-  points: [number, number][]; // Array of [lat, lng] coordinates
-  dataSource: string; // The API source it's linked to (e.g., "Open-Meteo")
-  colorRules: ColorRule[]; // The specific rules for this polygon
-  currentValue?: number; // The latest fetched value (e.g., 26)
-  currentColor?: string; // The color based on the current value and rules
+  id: string;
+  name: string;
+  points: [number, number][];
+  dataSource: string;
+  colorRules: ColorRule[];
+  currentValue?: number;
+  currentColor?: string;
 };
-// ... (paste the type definitions from step 2 here) ...
 
+// --- STATE SHAPE ---
+// This defines all the data our dashboard will track.
+export type DashboardState = {
+  polygons: Polygon[];
+  // Time window: 15 days in the past to 15 days in the future
+  timeWindow: {
+    start: Date;
+    end: Date;
+  };
+  // The user's current selection on the timeline
+  selectedTime: Date | { start: Date; end: Date }; 
+  isRangeMode: boolean; // Toggles between single point and range slider
+};
+
+// --- ACTIONS ---
+// These are the functions that can modify our state.
 export type DashboardActions = {
-  setSelectedHour: (hour: Date) => void;
   addPolygon: (points: [number, number][]) => void;
   removePolygon: (polygonId: string) => void;
+  setSelectedTime: (time: Date) => void;
+  setSelectedTimeRange: (range: { start: Date; end: Date }) => void;
+  toggleMode: () => void;
   // We will add more actions later (updateName, addRule, etc.)
 };
 
-// Create the store by combining the state and actions
+
+// --- STORE CREATION ---
+// This is where we put it all together.
+
+const thirtyDaysAgo = subDays(new Date(), 15);
+const thirtyDaysFromNow = addDays(new Date(), 15);
+
 export const useDashboardStore = create<DashboardState & DashboardActions>((set) => ({
-  selectedHour: new Date(), // Default to the current hour
-  polygons: [], // Start with no polygons
+  // Initial State
+  polygons: [],
+  timeWindow: {
+    start: thirtyDaysAgo,
+    end: thirtyDaysFromNow,
+  },
+  selectedTime: new Date(), // Default to the current time
+  isRangeMode: false, // Start in single point mode
 
-  setSelectedHour: (hour) => set({ selectedHour: hour }),
-
+  // Actions
   addPolygon: (points) =>
     set(
       produce((draft: DashboardState) => {
         const newPolygon: Polygon = {
-          id: nanoid(), // e.g., 'V1StGXR8_Z5jdHi6B-myT'
-          name: `Polygon ${draft.polygons.length + 1}`,
+          id: nanoid(),
+          name: `Analysis Zone ${draft.polygons.length + 1}`,
           points: points,
-          dataSource: 'Open-Meteo', // Default data source
-          colorRules: [], // Starts with no rules
+          dataSource: 'Open-Meteo', // Default
+          colorRules: [],
         };
         draft.polygons.push(newPolygon);
       })
     ),
-  
+
   removePolygon: (polygonId) =>
     set(
       produce((draft: DashboardState) => {
         draft.polygons = draft.polygons.filter((p) => p.id !== polygonId);
       })
     ),
-}));
 
-// This is the main shape of our entire application's state
-export type DashboardState = {
-  selectedHour: Date;
-  polygons: Polygon[];
-  // We will add functions to modify this state below
-};
+  setSelectedTime: (time) =>
+    set(
+      produce((draft: DashboardState) => {
+        draft.selectedTime = time;
+      })
+    ),
+  
+  setSelectedTimeRange: (range) =>
+    set(
+      produce((draft: DashboardState) => {
+        draft.selectedTime = range;
+      })
+    ),
+
+  toggleMode: () => set((state) => ({ isRangeMode: !state.isRangeMode })),
+}));
